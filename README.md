@@ -6,7 +6,7 @@ Evidence Gap Radar crosses a research topic with two lists you choose. Rows migh
 
 The result is a one-screen evidence map. It shows where a thesis, grant proposal or systematic review can add something new, and it backs that up with numbers and reproducible search strings.
 
-![Evidence Gap Radar showing youth mental health research across six South Asian countries and seven study designs](docs/screenshot-light.png)
+![Evidence Gap Radar showing youth mental health research across six South Asian countries and seven study designs](screenshot-light.png)
 
 > **Live demo:** https://tjkawish.github.io/evidence-gap-radar/
 
@@ -41,7 +41,7 @@ Across the region, youth mental health research leans heavily on cross-sectional
 ## Features
 
 - **Gap matrix:** live PubMed counts for every row × column cell, coloured by how far each sits above or below its expected count, or by raw count.
-- **Gap score:** each cell gets a Poisson z-score, and cells with z ≤ −2 get a dashed outline. See the [methodology](docs/METHODOLOGY.md).
+- **Gap score:** each cell gets a Poisson z-score, and cells with z ≤ −2 get a dashed outline. See the [methodology](METHODOLOGY.md).
 - **Ranked gap list:** the biggest shortfalls in order, plus patterns across the whole map, such as "Cohort falls short in 4 of 6 countries".
 - **Cell inspector:**
   - the exact search string, with a copy button and a link to open it in PubMed
@@ -79,7 +79,7 @@ python3 -m http.server 8000
 
 ### Option 3: use it inside claude.ai
 
-`claude/evidence-gap-radar.html` is the version built as a Claude artifact. Inside claude.ai it searches through your own **PubMed** and **Paperguide** connectors. It can also ask Claude to **draft a research question** (population, intervention, comparison, outcome and design) for any gap.
+`evidence-gap-radar.html` is the version built as a Claude artifact. Inside claude.ai it searches through your own **PubMed** and **Paperguide** connectors. It can also ask Claude to **draft a research question** (population, intervention, comparison, outcome and design) for any gap.
 
 ---
 
@@ -133,7 +133,7 @@ z = (O − E) / √E
 
 where `O` is the observed count. A cell is flagged when `z ≤ −2`, or when `O = 0` and `E ≥ 1`.
 
-Full details, assumptions and caveats are in [docs/METHODOLOGY.md](docs/METHODOLOGY.md).
+Full details, assumptions and caveats are in [METHODOLOGY.md](METHODOLOGY.md).
 
 ### Limitations
 
@@ -147,12 +147,10 @@ Full details, assumptions and caveats are in [docs/METHODOLOGY.md](docs/METHODOL
 
 ## Deploy to GitHub Pages
 
-This repository includes a workflow (`.github/workflows/pages.yml`) that publishes the site on every push to `main`.
-
-1. Push the repository to GitHub.
-2. Go to **Settings → Pages → Build and deployment** and set **Source** to **GitHub Actions**.
-3. Push to `main`, or run the workflow from the **Actions** tab.
-4. The site appears at `https://tjkawish.github.io/evidence-gap-radar/`.
+1. Go to **Settings → Pages**.
+2. Under **Build and deployment**, set **Source** to **Deploy from a branch**.
+3. Pick the `main` branch and the `/ (root)` folder, then click **Save**.
+4. After a minute or two, the site is live at `https://tjkawish.github.io/evidence-gap-radar/`.
 
 ---
 
@@ -160,17 +158,12 @@ This repository includes a workflow (`.github/workflows/pages.yml`) that publish
 
 ```
 evidence-gap-radar/
-├── index.html                  # The app: standalone, single file (NCBI + OpenAlex)
-├── claude/
-│   └── evidence-gap-radar.html # claude.ai artifact version (PubMed + Paperguide connectors, Claude drafting)
-├── docs/
-│   ├── METHODOLOGY.md          # Statistics, assumptions, caveats
-│   ├── screenshot-light.png
-│   ├── screenshot-dark.png
-│   └── screenshot-mobile.png
-├── .github/
-│   ├── workflows/pages.yml     # GitHub Pages deployment
-│   └── ISSUE_TEMPLATE/         # Bug report and preset request templates
+├── index.html                # The app: standalone, single file (NCBI + OpenAlex)
+├── evidence-gap-radar.html   # claude.ai artifact version (PubMed + Paperguide connectors, Claude drafting)
+├── METHODOLOGY.md            # Statistics, assumptions, caveats
+├── screenshot-light.png
+├── screenshot-dark.png
+├── screenshot-mobile.png
 ├── CHANGELOG.md
 ├── CITATION.cff
 ├── CONTRIBUTING.md
