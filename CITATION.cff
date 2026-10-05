@@ -1,0 +1,26 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "Evidence Gap Radar: live PubMed evidence-gap mapping"
+type: software
+authors:
+  - family-names: Latif
+    given-names: Tajamal
+    affiliation: "Islamabad, Pakistan"
+version: 1.0.0
+date-released: 2026-10-05
+license: MIT
+repository-code: "https://github.com/tjkawish/evidence-gap-radar"
+url: "https://tjkawish.github.io/evidence-gap-radar/"
+abstract: >-
+  A browser-based tool that crosses a research topic with two user-defined
+  axes (for example countries and study designs), counts PubMed records for
+  every combination, compares each count with its expected value under
+  independence, and flags under-studied combinations using a Poisson z-score.
+  Flagged cells can be checked against OpenAlex and Google Scholar.
+keywords:
+  - evidence gap map
+  - PubMed
+  - bibliometrics
+  - systematic review
+  - public health
+  - research prioritisation

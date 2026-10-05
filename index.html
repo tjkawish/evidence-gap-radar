@@ -1,0 +1,833 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Evidence Gap Radar</title>
+<meta name="description" content="Map PubMed evidence across countries, populations and study designs, and flag the combinations that are under-studied.">
+<meta name="color-scheme" content="light dark">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..125,500..800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: a lab instrument. Query builder rail on the left, the gap matrix as the main stage, gap shortlist + cell inspector below it. */
+:root{
+  --bg:#f4f6f8; --surface:#ffffff; --surface-2:#eaeef2; --line:#d5dce3;
+  --fg:#121922; --muted:#5b6876; --accent:#0e6b6b; --accent-fg:#ffffff;
+  --over:#0e6b6b; --under:#c2410c; --seq:#0e6b6b; --ok:#2f7d4f; --warn:#b45309;
+  --font-display:"Archivo", "Arial Narrow", system-ui, sans-serif;
+  --font-body:"IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono:"IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0d1217; --surface:#151c24; --surface-2:#1d2630; --line:#2b3642;
+  --fg:#e3e9ef; --muted:#93a1af; --accent:#5cc8c0; --accent-fg:#06201f;
+  --over:#4fbdb5; --under:#fb8a4c; --seq:#4fbdb5; --ok:#6fcf97; --warn:#f0b35a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0d1217; --surface:#151c24; --surface-2:#1d2630; --line:#2b3642;
+  --fg:#e3e9ef; --muted:#93a1af; --accent:#5cc8c0; --accent-fg:#06201f;
+  --over:#4fbdb5; --under:#fb8a4c; --seq:#4fbdb5; --ok:#6fcf97; --warn:#f0b35a; color-scheme:dark}
+
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-body);font-size:14.5px;line-height:1.5;padding-inline:16px;padding-block:22px 56px}
+.wrap{max-width:1280px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+h1,h2,h3{font-family:var(--font-display);margin:0;text-wrap:balance;line-height:1.1}
+h1{font-size:clamp(2rem,5vw,3.1rem);font-weight:800;font-stretch:80%;letter-spacing:-.01em;text-transform:uppercase}
+h2{font-size:1.05rem;font-weight:700;font-stretch:90%;letter-spacing:.02em;text-transform:uppercase}
+h3{font-size:.98rem;font-weight:700}
+p{margin:0}
+a{color:var(--accent)}
+.muted{color:var(--muted)}
+.mono{font-family:var(--font-mono)}
+.num{font-variant-numeric:tabular-nums}
+.label{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+header.top{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px 28px;align-items:end}
+@media (max-width:720px){header.top{grid-template-columns:minmax(0,1fr)}}
+.lede{max-width:66ch;color:var(--muted);margin-top:8px;font-size:1rem}
+.status{display:flex;align-items:center;gap:8px;font-size:.82rem;padding:6px 12px;border:1px solid var(--line);border-radius:999px;background:var(--surface);white-space:nowrap}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.dot.live{background:var(--ok);box-shadow:0 0 0 3px color-mix(in oklab,var(--ok) 25%,transparent)}
+.dot.off{background:var(--warn)}
+
+.main{display:grid;grid-template-columns:330px minmax(0,1fr);gap:20px;align-items:start}
+@media (max-width:980px){.main{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px}
+
+/* builder */
+.builder{display:flex;flex-direction:column;gap:14px}
+.field{display:flex;flex-direction:column;gap:5px}
+.field-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
+select,input[type=text],input[type=number],textarea{background:var(--surface-2);border:1px solid var(--line);border-radius:6px;padding:7px 9px;width:100%}
+textarea{font-family:var(--font-mono);font-size:.78rem;line-height:1.55;resize:vertical}
+#topic{min-height:84px}
+.axis{min-height:150px;white-space:pre;overflow-x:auto}
+.inline{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;font-size:.86rem}
+.inline label{display:flex;align-items:center;gap:6px}
+.inline input[type=number]{width:84px}
+.hint{font-size:.76rem;color:var(--muted)}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:7px;padding:7px 12px;font-weight:600;font-size:.86rem}
+.btn:hover{background:var(--surface-2)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent);font-family:var(--font-display);font-stretch:90%;letter-spacing:.04em;text-transform:uppercase;font-size:.95rem;padding:10px 14px}
+.btn.small{padding:3px 9px;font-size:.76rem}
+.btn.link{border:0;background:none;padding:0;color:var(--accent);font-weight:600;font-size:.78rem}
+.run-row{display:flex;gap:8px;align-items:center}
+.run-row .primary{flex:1}
+.progress{height:4px;background:var(--surface-2);border-radius:2px;overflow:hidden}
+.progress span{display:block;height:100%;background:var(--accent);width:0;transition:width .2s}
+.msg{font-size:.82rem;padding:8px 10px;border-radius:6px;background:var(--surface-2)}
+.msg.err{color:var(--under);background:color-mix(in oklab,var(--under) 12%,var(--surface))}
+
+/* matrix */
+.stage{display:flex;flex-direction:column;gap:12px;min-width:0}
+.stage-head{display:flex;flex-wrap:wrap;gap:10px 18px;justify-content:space-between;align-items:flex-end}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+.seg button{border:0;background:var(--surface);padding:5px 11px;font-size:.8rem;font-weight:600;color:var(--muted)}
+.seg button[aria-pressed=true]{background:var(--fg);color:var(--bg)}
+.matrix-scroll{overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+table.mx{border-collapse:separate;border-spacing:3px;min-width:100%;font-variant-numeric:tabular-nums}
+table.mx th{font-weight:600;font-size:.78rem;padding:6px 8px;vertical-align:bottom;text-align:center;color:var(--fg)}
+table.mx thead th small,table.mx tbody th small{display:block;font-family:var(--font-mono);font-weight:400;color:var(--muted);font-size:.7rem}
+table.mx tbody th{text-align:right;white-space:nowrap;vertical-align:middle}
+table.mx th.corner{text-align:left;font-weight:400;color:var(--muted);font-size:.72rem;min-width:110px}
+.cell{width:100%;min-width:86px;height:58px;border:1px solid transparent;border-radius:5px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;position:relative;background:var(--surface-2)}
+.cell b{font-family:var(--font-mono);font-size:1rem;font-weight:600}
+.cell small{font-family:var(--font-mono);font-size:.68rem;opacity:.8;white-space:nowrap}
+.cell.gap{border:2px dashed var(--under)}
+.cell.blank b{color:var(--under)}
+.cell[aria-pressed=true]{outline:2px solid var(--fg);outline-offset:1px}
+.cell.pending{animation:pulse 1.2s ease-in-out infinite}
+.cell.err b{color:var(--under);font-size:.8rem}
+@keyframes pulse{50%{opacity:.45}}
+@media (prefers-reduced-motion:reduce){.cell.pending{animation:none}.progress span{transition:none}}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center;font-size:.76rem;color:var(--muted)}
+.ramp{display:inline-block;width:120px;height:10px;border-radius:3px;vertical-align:middle}
+.sw{display:inline-block;width:14px;height:14px;border-radius:3px;vertical-align:middle;margin-right:4px}
+.sw.gapsw{border:2px dashed var(--under);background:transparent}
+.snapshot{font-size:.78rem;color:var(--muted)}
+
+/* lower */
+.lower{display:grid;grid-template-columns:minmax(0,0.9fr) minmax(0,1.1fr);gap:20px;align-items:start}
+@media (max-width:980px){.lower{grid-template-columns:minmax(0,1fr)}}
+.gaps{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:6px}
+.gaps button{width:100%;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;text-align:left;padding:9px 11px;border:1px solid var(--line);border-radius:7px;background:var(--surface)}
+.gaps button:hover{background:var(--surface-2)}
+.gaps .t{font-weight:600}
+.gaps .s{font-size:.78rem;color:var(--muted);grid-column:1/2}
+.z{font-family:var(--font-mono);font-weight:600;color:var(--under);grid-row:1/3;grid-column:2;align-self:center;font-size:.95rem}
+.z.pos{color:var(--over)}
+.insight{margin-top:14px;padding-top:12px;border-top:1px solid var(--line);font-size:.88rem}
+.insight ul{margin:6px 0 0;padding-left:18px}
+
+.inspector{display:flex;flex-direction:column;gap:14px}
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+@media (max-width:520px){.stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.stat{border:1px solid var(--line);border-radius:7px;padding:8px 10px}
+.stat b{display:block;font-family:var(--font-mono);font-size:1.25rem;font-weight:600}
+.verdict{font-size:.92rem;padding:10px 12px;border-radius:7px;border-left:4px solid var(--muted);background:var(--surface-2)}
+.verdict.under{border-left-color:var(--under)}
+.verdict.over{border-left-color:var(--over)}
+.qbox{font-family:var(--font-mono);font-size:.74rem;background:var(--surface-2);border-radius:6px;padding:8px 10px;white-space:pre-wrap;word-break:break-word;max-height:120px;overflow:auto}
+.papers{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:8px}
+.papers li{font-size:.86rem;line-height:1.4}
+.papers .pm{font-size:.76rem;color:var(--muted)}
+.beyond{border-top:1px solid var(--line);padding-top:12px;display:flex;flex-direction:column;gap:8px}
+.tag{display:inline-block;font-size:.68rem;font-weight:600;padding:0 6px;border-radius:4px;margin-left:6px;vertical-align:1px}
+.tag.new{color:var(--under);background:color-mix(in oklab,var(--under) 14%,var(--surface))}
+.tag.dup{color:var(--muted);background:var(--surface-2)}
+.tag.on{color:var(--over);background:color-mix(in oklab,var(--over) 14%,var(--surface))}
+.pg-sum{font-size:.88rem}
+.scholar{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;font-size:.86rem;padding:10px 12px;border-radius:7px;background:var(--surface-2)}
+.rq{border:1px solid var(--accent);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;font-size:.88rem}
+.rq .q{font-family:var(--font-display);font-size:1.05rem;font-weight:700;line-height:1.3}
+.pico{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 12px;font-size:.84rem}
+.pico dt{font-weight:600;color:var(--muted)}
+.pico dd{margin:0}
+.method{font-size:.86rem;max-width:84ch;display:flex;flex-direction:column;gap:8px}
+.method code{font-family:var(--font-mono);font-size:.78rem;background:var(--surface-2);padding:1px 5px;border-radius:4px}
+footer{font-size:.78rem;color:var(--muted)}
+.toast{font-size:.76rem;color:var(--ok);font-weight:600}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <p class="label">PubMed · OpenAlex · Google Scholar · gap detection</p>
+      <h1>Evidence Gap Radar</h1>
+      <p class="lede">Cross a research topic with places and study types, or with populations and outcomes. The radar counts PubMed papers for every combination. It then flags the cells with far fewer papers than you'd expect from the rest of the field. Those cells are where a thesis, grant or review can add something new.</p>
+    </div>
+    <div class="status" id="status"><span class="dot" id="dot"></span><span id="statusText">Checking PubMed connection…</span></div>
+  </header>
+
+  <div class="main">
+    <aside class="panel builder" aria-labelledby="b-h">
+      <h2 id="b-h">Build the map</h2>
+
+      <div class="field">
+        <div class="field-head"><label class="label" for="topicPreset">Topic</label></div>
+        <select id="topicPreset"></select>
+        <textarea id="topic" aria-label="Topic query in PubMed syntax" spellcheck="false"></textarea>
+        <div class="inline">
+          <label for="humans"><input type="checkbox" id="humans" checked> Humans only</label>
+          <label for="fromYear">From year <input type="number" id="fromYear" min="1950" max="2030" placeholder="any"></label>
+        </div>
+      </div>
+
+      <div class="field">
+        <div class="field-head"><label class="label" for="rowPreset">Rows</label></div>
+        <select id="rowPreset"></select>
+        <textarea id="rows" class="axis" aria-label="Row definitions, one per line: Label = PubMed query" spellcheck="false"></textarea>
+      </div>
+
+      <div class="field">
+        <div class="field-head"><label class="label" for="colPreset">Columns</label>
+          <button class="btn link" id="suggestBtn" type="button" hidden>Suggest with Claude</button></div>
+        <select id="colPreset"></select>
+        <textarea id="cols" class="axis" aria-label="Column definitions, one per line: Label = PubMed query" spellcheck="false"></textarea>
+        <p class="hint">One per line: <span class="mono">Label = PubMed query</span>. Use [tiab], [mh], [pt] tags. No wildcards.</p>
+      </div>
+
+      <details id="settings" class="field" hidden>
+        <summary class="label" style="cursor:pointer">NCBI API key (optional)</summary>
+        <input type="text" id="ncbiKey" autocomplete="off" spellcheck="false" placeholder="paste key">
+        <p class="hint">Raises PubMed's limit from 3 to 10 searches a second, so big maps run about 3× faster. Get one free under NCBI account settings. It's stored only in this browser.</p>
+      </details>
+      <div class="field">
+        <div class="run-row">
+          <button class="btn primary" id="runBtn" type="button">Map the gaps</button>
+          <button class="btn" id="stopBtn" type="button" hidden>Stop</button>
+        </div>
+        <div class="progress" aria-hidden="true"><span id="bar"></span></div>
+        <p class="hint" id="runHint"></p>
+        <p class="msg" id="runMsg" hidden></p>
+      </div>
+    </aside>
+
+    <section class="stage" aria-labelledby="m-h">
+      <div class="stage-head">
+        <div>
+          <h2 id="m-h">Gap matrix</h2>
+          <p class="snapshot" id="snapshot"></p>
+        </div>
+        <div class="seg" role="group" aria-label="Colour cells by">
+          <button type="button" id="modeOE" aria-pressed="true">vs expected</button>
+          <button type="button" id="modeN" aria-pressed="false">paper count</button>
+        </div>
+      </div>
+      <div class="matrix-scroll"><table class="mx" id="mx"></table></div>
+      <div class="legend" id="legend"></div>
+      <div class="row" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <button class="btn small" id="copyTsv" type="button">Copy table</button>
+        <button class="btn small" id="dlCsv" type="button" hidden>Download CSV with search strings</button>
+        <span class="toast" id="copyToast" hidden>Copied</span>
+      </div>
+    </section>
+  </div>
+
+  <div class="lower">
+    <section class="panel" aria-labelledby="g-h">
+      <h2 id="g-h">Biggest gaps</h2>
+      <p class="hint" style="margin-top:4px">Cells furthest below their expected count. Pick one to inspect it.</p>
+      <ul class="gaps" id="gaps"></ul>
+      <div class="insight" id="insight"></div>
+    </section>
+    <section class="panel inspector" id="inspector" aria-live="polite"></section>
+  </div>
+
+  <section class="panel method" aria-labelledby="h-h">
+    <h2 id="h-h">How the radar decides what's a gap</h2>
+    <p><b>Counts.</b> Each cell is the number of PubMed records matching <code>topic AND row AND column</code>, plus the humans and year filters if they're on. Row and column totals use the topic with one axis only.</p>
+    <p><b>Expected.</b> If the topic's literature were spread evenly, a cell would hold <code>row total × column total ÷ topic total</code> papers. That's the same independence model as a chi-square table. Say cohort designs are 18% of youth mental health papers worldwide. Then about 18% of Pakistan's papers on it should be cohorts too.</p>
+    <p><b>Gap score.</b> <code>z = (observed − expected) ÷ √expected</code>, a Poisson z-score. A cell with z ≤ −2 gets a dashed border. A cell with no papers is marked in orange whenever at least one paper was expected.</p>
+    <p><b>Read with care.</b> These are search hits, not screened studies. MeSH indexing lags by months, so the newest papers carry only title and abstract terms. A low count can also mean the search string misses that field's vocabulary. Treat a flagged cell as a lead worth a proper scoping search, not a finding in itself.</p>
+  </section>
+
+  <footer>Counts and article details come from PubMed (US National Library of Medicine) through NCBI E-utilities, or through the PubMed connector when opened inside claude.ai. The beyond-PubMed check uses OpenAlex (or Paperguide inside claude.ai). The Google Scholar button opens an ordinary Scholar search. Cite articles by their DOIs. <a href="https://github.com/tjkawish/evidence-gap-radar">Source on GitHub</a>.</footer>
+</div>
+
+<script>
+(function(){
+"use strict";
+/* ---------------- presets ---------------- */
+const TOPICS=[
+  {id:"ymh",label:"Youth mental health",q:'("mental health"[tiab] OR depression[tiab] OR anxiety[tiab] OR "mental disorders"[mh]) AND (adolescent[mh] OR youth[tiab] OR "young people"[tiab])'},
+  {id:"heatpreg",label:"Heat and pregnancy",q:'(heat[tiab] OR heatwave[tiab] OR "heat wave"[tiab] OR "hot temperature"[mh] OR "extreme heat"[mh]) AND (pregnancy[mh] OR pregnant[tiab])'},
+  {id:"zerodose",label:"Zero-dose and missed immunization",q:'("zero-dose"[tiab] OR "missed vaccination"[tiab] OR "vaccination coverage"[mh] OR "immunization programs"[mh]) AND (child[mh] OR infant[mh])'},
+  {id:"urban",label:"Urban slums and health",q:'(slum[tiab] OR slums[tiab] OR "informal settlement"[tiab] OR "poverty areas"[mh]) AND (urban population[mh] OR urban[tiab])'},
+  {id:"maternal",label:"Maternal nutrition",q:'("maternal nutritional physiological phenomena"[mh] OR "maternal nutrition"[tiab] OR "diet"[mh]) AND pregnancy[mh]'},
+  {id:"custom",label:"Custom…",q:""}
+];
+const AXES={
+  sasia:{label:"Countries · South Asia",text:`Pakistan = Pakistan[tiab] OR Pakistan[mh]
+India = India[tiab] OR India[mh]
+Bangladesh = Bangladesh[tiab] OR Bangladesh[mh]
+Nepal = Nepal[tiab] OR Nepal[mh]
+Sri Lanka = "Sri Lanka"[tiab] OR "Sri Lanka"[mh]
+Afghanistan = Afghanistan[tiab] OR Afghanistan[mh]`},
+  pkprov:{label:"Pakistan · provinces",text:`Punjab = Punjab[tiab] AND Pakistan[tiab]
+Sindh = (Sindh[tiab] OR Karachi[tiab] OR Hyderabad[tiab]) AND Pakistan[tiab]
+Khyber Pakhtunkhwa = "Khyber Pakhtunkhwa"[tiab] OR Peshawar[tiab]
+Balochistan = Balochistan[tiab] OR Baluchistan[tiab] OR Quetta[tiab]
+Gilgit-Baltistan = "Gilgit-Baltistan"[tiab] OR Gilgit[tiab]
+Islamabad = Islamabad[tiab] OR Rawalpindi[tiab]`},
+  lmic:{label:"Countries · high-burden LMICs",text:`Pakistan = Pakistan[tiab] OR Pakistan[mh]
+Nigeria = Nigeria[tiab] OR Nigeria[mh]
+Ethiopia = Ethiopia[tiab] OR Ethiopia[mh]
+DR Congo = "Democratic Republic of the Congo"[tiab] OR "Democratic Republic of the Congo"[mh]
+Bangladesh = Bangladesh[tiab] OR Bangladesh[mh]
+Indonesia = Indonesia[tiab] OR Indonesia[mh]
+Kenya = Kenya[tiab] OR Kenya[mh]
+Uganda = Uganda[tiab] OR Uganda[mh]`},
+  design:{label:"Study designs",text:`RCT = randomized controlled trial[pt]
+Cohort = cohort studies[mh]
+Cross-sectional = cross-sectional studies[mh]
+Qualitative = qualitative research[mh] OR qualitative[tiab]
+Systematic review = systematic review[pt]
+Economic evaluation = "cost-benefit analysis"[mh] OR "cost-effectiveness"[tiab]
+Implementation = "implementation science"[mh] OR "scale-up"[tiab]`},
+  pop:{label:"Populations",text:`Adolescents = adolescent[mh]
+Pregnant women = pregnancy[mh] OR pregnant[tiab]
+Under-5s = "child, preschool"[mh] OR infant[mh]
+Older adults = aged[mh]
+Refugees & displaced = refugees[mh] OR "internally displaced"[tiab]
+Rural = "rural population"[mh] OR rural[tiab]
+Urban poor = "poverty areas"[mh] OR slum[tiab]
+Health workers = "health personnel"[mh] OR "community health workers"[mh]`},
+  mhout:{label:"Outcomes · mental health",text:`Depression = depression[mh] OR depression[tiab]
+Anxiety = "anxiety disorders"[mh] OR anxiety[tiab]
+Suicide & self-harm = suicide[mh] OR "self-injurious behavior"[mh]
+Substance use = "substance-related disorders"[mh]
+PTSD = "stress disorders, post-traumatic"[mh]
+Psychosis = "psychotic disorders"[mh]
+Stigma = "social stigma"[mh] OR stigma[tiab]
+Help-seeking = "help-seeking behavior"[mh] OR "help-seeking"[tiab]`},
+  mchout:{label:"Outcomes · maternal & child",text:`Preterm birth = "premature birth"[mh] OR preterm[tiab]
+Stillbirth = stillbirth[mh]
+Low birth weight = "infant, low birth weight"[mh]
+Pre-eclampsia = "pre-eclampsia"[mh] OR "hypertension, pregnancy-induced"[mh]
+Gestational diabetes = "diabetes, gestational"[mh]
+Anaemia = anemia[mh] OR anaemia[tiab]
+Stunting = "growth disorders"[mh] OR stunting[tiab]`},
+  years:{label:"Time periods",text:`2000–09 = 2000:2009[dp]
+2010–14 = 2010:2014[dp]
+2015–19 = 2015:2019[dp]
+2020–22 = 2020:2022[dp]
+2023–26 = 2023:2026[dp]`},
+  custom:{label:"Custom…",text:""}
+};
+
+/* Snapshot taken with PubMed on 5 Oct 2026 for the default configuration */
+const DEMO={
+  cfg:{topicId:"ymh",topic:TOPICS[0].q,humans:true,fromYear:"",rowId:"sasia",rowsText:AXES.sasia.text,colId:"design",colsText:AXES.design.text},
+  T:354975,R:[619,2282,419,351,232,354],C:[18375,65225,35801,10684,5571,1662,238],
+  O:[[32,66,220,49,6,6,4],[98,350,550,153,29,21,13],[8,34,202,36,5,2,0],[5,38,168,38,6,7,1],[4,36,68,13,4,2,0],[14,89,61,23,3,0,1]],
+  when:"2026-10-05",live:false,demo:true
+};
+const LS="evidence-gap-radar-v1";
+
+/* ---------------- state ---------------- */
+let source="demo", cfg, run, mode="oe", sel=null, mcp=null, sampleFn=null, downloads=null, running=false, stopFlag=false;
+const paperCache=new Map();
+let ncbiKey="";try{ncbiKey=localStorage.getItem(LS+"-ncbikey")||"";}catch(e){}
+(function init(){
+  let saved=null; try{saved=JSON.parse(localStorage.getItem(LS)||"null");}catch(e){}
+  if(saved&&saved.cfg&&saved.run){cfg=saved.cfg;run=saved.run;}else{cfg=JSON.parse(JSON.stringify(DEMO.cfg));run=JSON.parse(JSON.stringify(DEMO));delete run.cfg;}
+})();
+function persist(){try{localStorage.setItem(LS,JSON.stringify({cfg,run}));}catch(e){}}
+
+/* ---------------- helpers ---------------- */
+const $=id=>document.getElementById(id);
+function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+function fmt(n){return n==null?"–":Number(n).toLocaleString("en-US");}
+function fmtE(e){return e==null||!isFinite(e)?"–":e<10?e.toFixed(1):Math.round(e).toLocaleString("en-US");}
+function parseAxis(text){
+  return text.split(/\n/).map(l=>l.trim()).filter(Boolean).slice(0,12).map(l=>{
+    const k=l.indexOf("=");
+    if(k>0){return {label:l.slice(0,k).trim(),q:l.slice(k+1).trim()};}
+    return {label:l,q:l};
+  }).filter(a=>a.q);
+}
+function baseQuery(c){
+  let q="("+c.topic.trim()+")";
+  if(c.humans)q+=" AND humans[mh]";
+  const y=parseInt(c.fromYear,10); if(isFinite(y)&&y>1900)q+=` AND ${y}:3000[dp]`;
+  return q;
+}
+function cellQuery(c,r,col){let q=baseQuery(c);if(r)q+=" AND ("+r.q+")";if(col)q+=" AND ("+col.q+")";return q;}
+function axesOf(c){return {rows:parseAxis(c.rowsText),cols:parseAxis(c.colsText)};}
+function expected(i,j){const R=run.R[i],C=run.C[j];if(R==null||C==null||!run.T)return null;return R*C/run.T;}
+function zOf(o,e){if(o==null||e==null||typeof o!=="number")return null;return (o-e)/Math.sqrt(Math.max(e,0.5));}
+function cellClass(o,e,z){
+  if(typeof o!=="number"||e==null)return "";
+  if(o===0&&e>=1)return "gap blank";
+  if(z!=null&&z<=-2)return "gap";
+  return "";
+}
+
+/* ---------------- builder UI ---------------- */
+function fillSelect(sel,items,cur){sel.innerHTML=items.map(([v,l])=>`<option value="${v}"${v===cur?" selected":""}>${esc(l)}</option>`).join("");}
+function renderBuilder(){
+  fillSelect($("topicPreset"),TOPICS.map(t=>[t.id,t.label]),cfg.topicId);
+  const ax=Object.entries(AXES).map(([k,v])=>[k,v.label]);
+  fillSelect($("rowPreset"),ax,cfg.rowId); fillSelect($("colPreset"),ax,cfg.colId);
+  $("topic").value=cfg.topic; $("rows").value=cfg.rowsText; $("cols").value=cfg.colsText;
+  $("humans").checked=!!cfg.humans; $("fromYear").value=cfg.fromYear||"";
+  updateHint();
+}
+function updateHint(){
+  const {rows,cols}=axesOf(cfg);
+  const n=rows.length*cols.length+rows.length+cols.length+1;
+  $("runHint").textContent=`${rows.length} rows × ${cols.length} columns = ${n} PubMed searches. A run takes about ${Math.max(1,Math.round(n*0.7/60))} min.`;
+}
+$("topicPreset").addEventListener("change",e=>{const t=TOPICS.find(x=>x.id===e.target.value);cfg.topicId=t.id;if(t.q)cfg.topic=t.q;$("topic").value=cfg.topic;if(t.id==="custom")$("topic").focus();updateHint();});
+$("rowPreset").addEventListener("change",e=>{cfg.rowId=e.target.value;if(AXES[cfg.rowId].text)cfg.rowsText=AXES[cfg.rowId].text;$("rows").value=cfg.rowsText;updateHint();});
+$("colPreset").addEventListener("change",e=>{cfg.colId=e.target.value;if(AXES[cfg.colId].text)cfg.colsText=AXES[cfg.colId].text;$("cols").value=cfg.colsText;updateHint();});
+$("topic").addEventListener("input",e=>{cfg.topic=e.target.value;cfg.topicId="custom";$("topicPreset").value="custom";});
+$("rows").addEventListener("input",e=>{cfg.rowsText=e.target.value;cfg.rowId="custom";$("rowPreset").value="custom";updateHint();});
+$("cols").addEventListener("input",e=>{cfg.colsText=e.target.value;cfg.colId="custom";$("colPreset").value="custom";updateHint();});
+$("ncbiKey").value=ncbiKey;
+$("ncbiKey").addEventListener("change",e=>{ncbiKey=e.target.value.trim();try{localStorage.setItem(LS+"-ncbikey",ncbiKey);}catch(_){}});
+$("humans").addEventListener("change",e=>{cfg.humans=e.target.checked;});
+$("fromYear").addEventListener("change",e=>{cfg.fromYear=e.target.value;});
+
+/* ---------------- matrix ---------------- */
+function colorFor(o,e,z){
+  if(typeof o!=="number")return "";
+  if(mode==="n"){
+    const max=Math.max(1,...run.O.flat().filter(v=>typeof v==="number"));
+    const t=o===0?0:Math.log10(o+1)/Math.log10(max+1);
+    return `background:color-mix(in oklab,var(--seq) ${Math.round(8+t*72)}%,var(--surface));color:${t>0.6?"var(--accent-fg)":"var(--fg)"}`;
+  }
+  if(e==null)return "";
+  const r=Math.log2((o+0.5)/(e+0.5)); const k=Math.min(1,Math.abs(r)/3);
+  const v=r<0?"--under":"--over";
+  const pct=Math.round(6+k*62);
+  return `background:color-mix(in oklab,var(${v}) ${pct}%,var(--surface));color:${pct>50?"var(--accent-fg)":"var(--fg)"}`;
+}
+function renderMatrix(){
+  const {rows,cols}=run.axes;
+  let h=`<thead><tr><th class="corner" scope="col">${esc(run.rowLabel||"Rows")} ↓ · ${esc(run.colLabel||"Columns")} →<small>topic total ${fmt(run.T)}</small></th>`;
+  cols.forEach((c,j)=>{h+=`<th scope="col">${esc(c.label)}<small>${fmt(run.C[j])}</small></th>`;});
+  h+="</tr></thead><tbody>";
+  rows.forEach((r,i)=>{
+    h+=`<tr><th scope="row">${esc(r.label)}<small>${fmt(run.R[i])}</small></th>`;
+    cols.forEach((c,j)=>{
+      const o=run.O[i]?run.O[i][j]:null, e=expected(i,j), z=zOf(o,e);
+      const pend=o==null&&running, err=o&&typeof o==="object";
+      const cls=["cell",cellClass(o,e,z),pend?"pending":"",err?"err":""].join(" ");
+      const pressed=sel&&sel.i===i&&sel.j===j;
+      const lab=`${r.label} × ${c.label}: ${typeof o==="number"?o+" papers":"no count yet"}${e!=null?", about "+fmtE(e)+" expected":""}`;
+      h+=`<td><button type="button" class="${cls}" data-i="${i}" data-j="${j}" aria-pressed="${pressed}" aria-label="${esc(lab)}" style="${colorFor(o,e,z)}">
+        <b>${err?"error":typeof o==="number"?fmt(o):"·"}</b><small>${typeof o==="number"&&e!=null?(mode==="oe"?"exp "+fmtE(e):"z "+(z>=0?"+":"")+z.toFixed(1)):""}</small></button></td>`;
+    });
+    h+="</tr>";
+  });
+  h+="</tbody>";
+  $("mx").innerHTML=h;
+  $("legend").innerHTML=mode==="oe"
+    ? `<span><span class="ramp" style="background:linear-gradient(90deg,color-mix(in oklab,var(--under) 68%,var(--surface)),var(--surface),color-mix(in oklab,var(--over) 68%,var(--surface)))"></span></span><span>fewer than expected · as expected · more than expected</span><span><span class="sw gapsw"></span>gap (z ≤ −2, or zero papers when ≥1 expected)</span>`
+    : `<span><span class="ramp" style="background:linear-gradient(90deg,color-mix(in oklab,var(--seq) 8%,var(--surface)),color-mix(in oklab,var(--seq) 80%,var(--surface)))"></span></span><span>few papers → many papers (log scale)</span><span><span class="sw gapsw"></span>gap</span>`;
+  const when=run.when?new Date(run.when+"T12:00:00").toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"}):"";
+  $("snapshot").textContent=run.demo?`Example map: a saved PubMed snapshot from ${when}. Press “Map the gaps” to run your own live.`:running?"Searching PubMed…":`Live PubMed counts from ${when}${run.partial?" (stopped early, some cells missing)":""}.`;
+}
+$("mx").addEventListener("click",e=>{const b=e.target.closest(".cell");if(!b)return;sel={i:+b.dataset.i,j:+b.dataset.j};renderMatrix();renderInspector();
+  if(window.matchMedia("(max-width:980px)").matches)$("inspector").scrollIntoView({behavior:"smooth",block:"start"});});
+$("modeOE").addEventListener("click",()=>{mode="oe";$("modeOE").setAttribute("aria-pressed","true");$("modeN").setAttribute("aria-pressed","false");renderMatrix();});
+$("modeN").addEventListener("click",()=>{mode="n";$("modeN").setAttribute("aria-pressed","true");$("modeOE").setAttribute("aria-pressed","false");renderMatrix();});
+
+/* ---------------- gaps list ---------------- */
+function allCells(){
+  const out=[];const {rows,cols}=run.axes;
+  rows.forEach((r,i)=>cols.forEach((c,j)=>{const o=run.O[i]?run.O[i][j]:null;if(typeof o!=="number")return;const e=expected(i,j);if(e==null)return;out.push({i,j,r,c,o,e,z:zOf(o,e)});}));
+  return out;
+}
+function renderGaps(){
+  const cells=allCells();
+  const gaps=cells.filter(x=>(x.z<=-1.5&&x.e>=2)||(x.o===0&&x.e>=1)).sort((a,b)=>a.z-b.z).slice(0,7);
+  $("gaps").innerHTML=gaps.length?gaps.map(g=>`<li><button type="button" data-i="${g.i}" data-j="${g.j}">
+      <span class="t">${esc(g.r.label)} × ${esc(g.c.label)}</span>
+      <span class="z num">${g.z.toFixed(1)}</span>
+      <span class="s num">${fmt(g.o)} papers · about ${fmtE(g.e)} expected · ${g.o===0?"none found":Math.round(g.o/g.e*100)+"% of expected"}</span></button></li>`).join("")
+    : `<li class="muted" style="font-size:.86rem">${cells.length?"No cell is clearly below its expected count. Try narrower rows or a different column axis.":"Run a map to find gaps."}</li>`;
+  // axis-level insight: which column is under-used across most rows
+  const {rows,cols}=run.axes; const lines=[];
+  if(cells.length&&rows.length>1){
+    cols.forEach((c,j)=>{
+      const col=cells.filter(x=>x.j===j);const under=col.filter(x=>x.z<=-2).length;const over=col.filter(x=>x.z>=2).length;
+      if(under>=Math.max(2,Math.ceil(rows.length/2)))lines.push(`<b>${esc(c.label)}</b> falls short in ${under} of ${rows.length} ${esc((run.rowLabel||"rows").toLowerCase())}.`);
+      else if(over>=Math.max(2,Math.ceil(rows.length*0.66)))lines.push(`<b>${esc(c.label)}</b> is over-represented in ${over} of ${rows.length}, so the field leans on it.`);
+    });
+  }
+  $("insight").innerHTML=lines.length?`<h3>Patterns across the map</h3><ul>${lines.map(l=>`<li>${l}</li>`).join("")}</ul>`:"";
+}
+$("gaps").addEventListener("click",e=>{const b=e.target.closest("button[data-i]");if(!b)return;sel={i:+b.dataset.i,j:+b.dataset.j};renderMatrix();renderInspector();$("inspector").scrollIntoView({behavior:"smooth",block:"nearest"});});
+
+/* ---------------- inspector ---------------- */
+function plainTopic(t){
+  return t.replace(/\[[^\]]*\]/g,"").replace(/\s+/g," ").replace(/\(\s+/g,"(").replace(/\s+\)/g,")").trim();
+}
+function topicName(){const t=TOPICS.find(x=>x.id===run.cfg.topicId);return t&&t.q?t.label:plainTopic(run.cfg.topic).replace(/[()"]/g,"").replace(/\b(AND|OR|NOT)\b/g," ").replace(/\s+/g," ").slice(0,90);}
+function scholarLink(r,c){
+  const q=`"${r.label}" ${c.label} ${plainTopic(run.cfg.topic)}`;
+  const y=parseInt(run.cfg.fromYear,10);
+  return "https://scholar.google.com/scholar?q="+encodeURIComponent(q)+(isFinite(y)&&y>1900?"&as_ylo="+y:"");
+}
+const SYN={"rct":["randomi","trial"],"cohort":["cohort","longitudinal","prospective"],"cross-sectional":["cross-sectional","cross sectional","survey"],"qualitative":["qualitative","interview","focus group"],"systematic review":["systematic review","meta-analys"],"economic evaluation":["cost","economic"],"implementation":["implementation","scale-up","scale up"]};
+function termsFor(label){const k=label.toLowerCase();if(SYN[k])return SYN[k];return k.split(/[^a-z0-9-]+/).filter(w=>w.length>3).slice(0,3).concat(k.length<=4?[k]:[]);}
+const pgCache=new Map();
+async function loadPaperguide(r,c,q){
+  const target=$("pg"); if(!target)return;
+  const query=`${c.label} ${r.label} ${topicName()}`.slice(0,480);
+  try{
+    const bn=beyondName();
+    let res=pgCache.get(bn+query);
+    if(!res){res=await beyondSearch(query);pgCache.set(bn+query,res);}
+    if($("qbox")&&$("qbox").textContent!==q)return;
+    let pmDois=[];try{pmDois=JSON.parse(($("papers")&&$("papers").dataset.dois)||"[]");}catch(_){}
+    const rowT=termsFor(r.label).length?[r.label.toLowerCase()]:[], colT=termsFor(c.label);
+    const scored=res.map(x=>{const txt=((x.title||"")+" "+(x.abstract||"")).toLowerCase();
+      const onRow=rowT.some(t=>txt.includes(t)), onCol=colT.some(t=>txt.includes(t));
+      const doi=(x.doi||"").toLowerCase(); return {...x,onRow,onCol,dup:!!doi&&pmDois.includes(doi)};});
+    const on=scored.filter(x=>x.onRow&&x.onCol), extra=on.filter(x=>!x.dup);
+    const verdict=on.length===0?`None of ${bn}'s top ${res.length} matches mention both ${esc(r.label)} and ${esc(c.label.toLowerCase())}. That supports the gap.`
+      :`${on.length} of ${bn}'s top ${res.length} matches mention both ${esc(r.label)} and ${esc(c.label.toLowerCase())}${extra.length?`, and <b>${extra.length}</b> of them ${extra.length===1?"isn't":"aren't"} among the PubMed papers above`:""}. ${extra.length>=3?"Some of this literature sits outside PubMed, so the gap may be smaller than the count suggests.":"The gap mostly holds."}`;
+    const show=on.concat(scored.filter(x=>!(x.onRow&&x.onCol))).slice(0,6);
+    target.innerHTML=`<p class="pg-sum">${verdict}</p>`+(show.length?`<ul class="papers">${show.map(x=>`<li>${esc(x.title)}${x.onRow&&x.onCol?(x.dup?'<span class="tag dup">also in PubMed list</span>':'<span class="tag new">on target</span>'):""}
+      <div class="pm">${esc((x.authors&&x.authors[0])||"")}${x.authors&&x.authors.length>1?" et al.":""} · ${esc(x.journal||"")} ${esc((x.publication_date||"").slice(0,4))} · ${fmt(x.citation_count||0)} citations · ${x.doi?`<a href="https://doi.org/${esc(x.doi)}" target="_blank" rel="noopener">doi:${esc(x.doi)}</a>`:`<a href="${esc(x.url)}" target="_blank" rel="noopener">view</a>`}</div></li>`).join("")}</ul>`:"")+`<p class="hint" style="margin-top:4px">${bn} ranks by relevance, so this is a spot check of its top ${res.length} matches, not a second count.</p>`;
+  }catch(err){
+    const code=err&&err.code; let m;
+    if(code==="server_not_connected"||code==="selection_required")m="Paperguide isn't connected for you. Add it in claude.ai Settings → Connectors.";
+    else if(code==="needs_reauth")m="Reconnect Paperguide in claude.ai Settings → Connectors.";
+    else if(code==="not_in_manifest")m="Paperguide isn't allowed on this page. Allow it from the page's Permissions menu.";
+    else m=beyondName()+" didn't answer"+(err&&err.message?": "+err.message:".")+" Pick the cell again to retry.";
+    if(target)target.innerHTML=`<p class="muted" style="font-size:.86rem">${esc(m)}</p>`;
+  }
+}
+function pubmedLink(q){return "https://pubmed.ncbi.nlm.nih.gov/?term="+encodeURIComponent(q);}
+function renderInspector(){
+  const box=$("inspector");
+  if(!sel){
+    const g=allCells().sort((a,b)=>a.z-b.z)[0]; if(g)sel={i:g.i,j:g.j};
+  }
+  if(!sel||!run.axes.rows[sel.i]||!run.axes.cols[sel.j]){box.innerHTML='<h2>Cell inspector</h2><p class="muted">Pick a cell in the matrix.</p>';return;}
+  const r=run.axes.rows[sel.i],c=run.axes.cols[sel.j],o=run.O[sel.i]?run.O[sel.i][sel.j]:null,e=expected(sel.i,sel.j),z=zOf(o,e);
+  const q=cellQuery(run.cfg,r,c);
+  let verdict="",vcls="";
+  if(typeof o!=="number"){verdict="No count yet for this cell.";}
+  else if(o===0&&e<1){verdict=`No papers, but an even spread would predict fewer than one here too. That's too small to call a gap. Widen the row or column first.`;}
+  else if(z<=-2||(o===0&&e>=1)){vcls="under";verdict=`<b>Under-studied.</b> ${fmt(o)} paper${o===1?"":"s"} where about ${fmtE(e)} would be expected if ${esc(c.label.toLowerCase())} made up the same share of ${esc(r.label)}'s research as it does across the topic worldwide.`;}
+  else if(z>=2){vcls="over";verdict=`<b>Well covered.</b> ${fmt(o)} papers against about ${fmtE(e)} expected. The field leans on this combination, so a new study here needs a sharper angle.`;}
+  else {verdict=`<b>About as expected.</b> ${fmt(o)} papers against about ${fmtE(e)}. No strong signal either way.`;}
+  box.innerHTML=`
+    <div><p class="label">Cell inspector</p><h2 style="text-transform:none;font-size:1.35rem;letter-spacing:0">${esc(r.label)} × ${esc(c.label)}</h2></div>
+    <div class="stats">
+      <div class="stat"><span class="label">Found</span><b class="num">${typeof o==="number"?fmt(o):"–"}</b></div>
+      <div class="stat"><span class="label">Expected</span><b class="num">${fmtE(e)}</b></div>
+      <div class="stat"><span class="label">Ratio</span><b class="num">${typeof o==="number"&&e?((o/e).toFixed(2)+"×"):"–"}</b></div>
+      <div class="stat"><span class="label">Gap z</span><b class="num" style="color:${z!=null&&z<=-2?"var(--under)":z!=null&&z>=2?"var(--over)":"inherit"}">${z!=null?(z>=0?"+":"")+z.toFixed(1):"–"}</b></div>
+    </div>
+    <p class="verdict ${vcls}">${verdict}</p>
+    <div>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span class="label">Search string</span>
+        <span style="display:flex;gap:10px;align-items:center"><span class="toast" id="qToast" hidden>Copied</span><button class="btn link" id="copyQ" type="button">Copy</button><a class="btn link" href="${pubmedLink(q)}" target="_blank" rel="noopener">Open in PubMed ↗</a></span></div>
+      <div class="qbox" id="qbox">${esc(q)}</div>
+    </div>
+    <div>
+      <span class="label">Most relevant papers</span>
+      <div id="papers"><p class="muted" style="font-size:.86rem;margin-top:6px">${typeof o==="number"&&o===0?"No papers to list.":live()?"Loading from PubMed…":"Run the radar live to list papers here, or open the search in PubMed."}</p></div>
+    </div>
+    <div class="beyond">
+      <span class="label">Beyond PubMed: is the gap real?</span>
+      <div id="pg"><p class="muted" style="font-size:.86rem">${live()?(source==="claude"?"Checking Paperguide's 200M-paper index…":"Checking OpenAlex's 250M-work index…"):"Run the radar live to check this gap outside PubMed."}</p></div>
+      <div class="scholar"><span><b>Google Scholar</b> <span class="muted">· opens in a new tab with this cell's search</span></span>
+        <a class="btn small" href="${scholarLink(r,c)}" target="_blank" rel="noopener">Search Google Scholar ↗</a></div>
+    </div>
+    <div id="rqWrap" ${sampleFn&&typeof o==="number"?"":"hidden"}>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+        <span class="label">Turn this gap into a study</span>
+        <span style="display:flex;gap:8px"><button class="btn small" id="rqBtn" type="button">Draft a research question</button><button class="btn small" id="rqStop" type="button" hidden>Stop</button></span>
+      </div>
+      <div id="rqOut" style="margin-top:8px"></div>
+    </div>`;
+  $("copyQ").addEventListener("click",()=>copy(q,$("qToast"),$("qbox")));
+  if(live()&&typeof o==="number"&&o>0)loadPapers(q).then(()=>loadPaperguide(r,c,q));
+  else if(live()&&typeof o==="number")loadPaperguide(r,c,q);
+  const rqBtn=$("rqBtn"); if(rqBtn)rqBtn.addEventListener("click",()=>draftRQ(r,c,o,e,z,q));
+}
+function copy(text,toast,fallbackEl){
+  const ok=()=>{if(toast){toast.hidden=false;setTimeout(()=>toast.hidden=true,1600);}};
+  try{navigator.clipboard.writeText(text).then(ok,()=>selectEl(fallbackEl));}catch(e){selectEl(fallbackEl);}
+}
+function selectEl(el){if(!el)return;const rg=document.createRange();rg.selectNodeContents(el);const s=getSelection();s.removeAllRanges();s.addRange(rg);}
+
+/* ---------------- PubMed calls ---------------- */
+function payloadOf(res){let p=res&&res.payload!==undefined?res.payload:res;if(typeof p==="string"){try{p=JSON.parse(p);}catch(e){}}return p;}
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+async function pm(tool,input){
+  let lastErr;
+  for(let attempt=0;attempt<5;attempt++){
+    try{
+      const res=await mcp.callTool("PubMed",tool,input,{cache:{staleTime:300000,gcTime:86400000,refresh:attempt>0}});
+      const p=payloadOf(res);
+      if(p&&p.code==="RATE_LIMIT_EXCEEDED"){const ra=(p.details&&p.details.retryAfter)||2;await sleep(ra*1000+400*attempt+Math.random()*500);continue;}
+      return p;
+    }catch(err){
+      lastErr=err;
+      if(err&&err.retryable&&attempt<1){await sleep((err.retryAfterMs||1500)+Math.random()*800);continue;}
+      throw err;
+    }
+  }
+  throw lastErr||{code:"rate_limited",message:"PubMed kept asking us to slow down."};
+}
+function errCopy(err){
+  const code=err&&err.code;
+  switch(code){
+    case "needs_reauth":return "PubMed needs to be reconnected. Reconnect it in claude.ai Settings → Connectors, then run again.";
+    case "server_not_connected":case "selection_required":return "PubMed isn't connected for you. Add the PubMed connector in claude.ai Settings → Connectors, then run again.";
+    case "not_in_manifest":return "PubMed isn't allowed on this page. Allow it from the page's Permissions menu.";
+    case "blocked_by_policy":case "approval_required":return "Your organization's settings block PubMed searches from this page.";
+    case "server_unavailable":return "PubMed didn't answer in time. Wait a minute and run again; finished cells are kept.";
+    case "tool_error":return "PubMed rejected a search: "+(err.message||"check the query syntax in that row or column.");
+    case "rate_limited":return "PubMed asked us to slow down. Wait a minute and run again; finished cells are kept.";
+    case "network":return "Couldn't reach the search service. Check your internet connection and run again; finished cells are kept.";
+    case "not_granted":case "capability_disabled":case "capability_removed":return "Live PubMed searches aren't available in this view. Open the page in claude.ai to run your own map.";
+    default:return "A PubMed search failed"+(err&&err.message?": "+err.message:".");
+  }
+}
+/* ---- direct sources for the standalone (GitHub Pages) build ---- */
+let lastReq=0;
+async function throttle(){const gap=ncbiKey?110:380;const now=Date.now();const wait=Math.max(0,lastReq+gap-now);lastReq=now+wait;if(wait)await sleep(wait);}
+function timeoutSignal(ms){try{return AbortSignal.timeout(ms);}catch(e){return undefined;}}
+async function ncbi(path,params){
+  const u=new URL("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/"+path);
+  Object.entries(Object.assign({},params,{tool:"evidence-gap-radar",retmode:"json"})).forEach(([k,v])=>u.searchParams.set(k,v));
+  if(ncbiKey)u.searchParams.set("api_key",ncbiKey);
+  for(let a=0;a<5;a++){
+    await throttle();
+    let r;
+    try{r=await fetch(u.toString(),{signal:timeoutSignal(20000)});}
+    catch(e){if(a<2){await sleep(1200);continue;}throw {code:"network",message:"Couldn't reach NCBI."};}
+    if(r.status===429||r.status>=500){await sleep(1000*(a+1)+Math.random()*400);continue;}
+    if(!r.ok)throw {code:"tool_error",message:"NCBI returned HTTP "+r.status};
+    const j=await r.json();
+    const er=j.error||(j.esearchresult&&j.esearchresult.ERROR);
+    if(er){if(/rate limit/i.test(er)){await sleep(1200*(a+1));continue;}throw {code:"tool_error",message:er};}
+    return j;
+  }
+  throw {code:"rate_limited"};
+}
+async function ncbiCount(q){const j=await ncbi("esearch.fcgi",{db:"pubmed",term:q,retmax:0});const n=parseInt(j.esearchresult&&j.esearchresult.count,10);if(!isFinite(n))throw {code:"tool_error",message:"unexpected reply from NCBI"};return n;}
+async function ncbiPapers(q){
+  const s=await ncbi("esearch.fcgi",{db:"pubmed",term:q,retmax:5,sort:"relevance"});
+  const ids=(s.esearchresult&&s.esearchresult.idlist)||[]; if(!ids.length)return [];
+  const m=await ncbi("esummary.fcgi",{db:"pubmed",id:ids.join(",")});
+  const res=m.result||{};
+  return (res.uids||ids).map(id=>res[id]).filter(Boolean).map(a=>({pmid:a.uid,title:a.title,journal:a.source,year:(a.pubdate||"").slice(0,4),
+    first:(a.sortfirstauthor||"").split(" ")[0],doi:((a.articleids||[]).find(x=>x.idtype==="doi")||{}).value||""}));
+}
+async function openAlex(query,y){
+  const u=new URL("https://api.openalex.org/works");
+  u.searchParams.set("search",query);u.searchParams.set("per-page","20");
+  u.searchParams.set("select","id,display_name,doi,publication_year,cited_by_count,primary_location,authorships,abstract_inverted_index");
+  if(y)u.searchParams.set("filter","from_publication_date:"+y+"-01-01");
+  let r;try{r=await fetch(u.toString(),{signal:timeoutSignal(20000)});}catch(e){throw {code:"network",message:"Couldn't reach OpenAlex."};}
+  if(!r.ok)throw {code:"tool_error",message:"OpenAlex returned HTTP "+r.status};
+  const j=await r.json();
+  return (j.results||[]).map(w=>({title:w.display_name,abstract:w.abstract_inverted_index?Object.keys(w.abstract_inverted_index).join(" "):"",
+    authors:(w.authorships||[]).map(a=>a.author&&a.author.display_name).filter(Boolean),
+    journal:w.primary_location&&w.primary_location.source?w.primary_location.source.display_name:"",
+    publication_date:String(w.publication_year||""),citation_count:w.cited_by_count||0,
+    doi:w.doi?String(w.doi).replace(/^https?:\/\/doi\.org\//i,""):"",url:w.id}));
+}
+function live(){return source==="claude"||source==="ncbi";}
+function beyondName(){return source==="claude"?"Paperguide":"OpenAlex";}
+async function getPapers(q){
+  if(source==="ncbi")return ncbiPapers(q);
+  const s=await pm("search_articles",{query:q,max_results:5,sort:"relevance"});
+  const ids=(s&&s.pmids)||[]; if(!ids.length)return [];
+  const m=await pm("get_article_metadata",{pmids:ids});
+  return ((m&&m.articles)||[]).map(a=>({pmid:a.identifiers&&a.identifiers.pmid,doi:(a.identifiers&&a.identifiers.doi)||a.doi,title:a.title,
+    journal:a.journal&&(a.journal.iso_abbreviation||a.journal.title),year:a.publication_date&&a.publication_date.year,first:a.authors&&a.authors[0]?a.authors[0].last_name:""}));
+}
+async function beyondSearch(query){
+  const y=parseInt(run.cfg.fromYear,10), yy=isFinite(y)&&y>1900?y:null;
+  if(source==="ncbi")return openAlex(query,yy);
+  const input={query,limit:20}; if(yy)input.year_min=yy;
+  const resp=await mcp.callTool("Paperguide","search",input,{cache:{staleTime:300000,gcTime:86400000}});
+  const p=payloadOf(resp); return (p&&p.results)||[];
+}
+async function countOf(q){if(source==="ncbi")return ncbiCount(q);const p=await pm("search_articles",{query:q,max_results:1});const n=p&&(p.total_count??p.count);if(typeof n!=="number")throw {code:"tool_error",message:"unexpected reply from PubMed"};return n;}
+
+async function runMap(){
+  if(running)return;
+  const msg=$("runMsg"); msg.hidden=true; msg.classList.remove("err");
+  if(!live()){msg.hidden=false;msg.classList.add("err");msg.textContent="Live PubMed search isn't reachable from here. Check your internet connection and reload the page.";return;}
+  const {rows,cols}=axesOf(cfg);
+  if(!cfg.topic.trim()||!rows.length||!cols.length){msg.hidden=false;msg.classList.add("err");msg.textContent="Add a topic and at least one row and one column.";return;}
+  if(/\*/.test(cfg.topic+cfg.rowsText+cfg.colsText)){msg.hidden=false;msg.classList.add("err");msg.textContent="PubMed searches here can't use * wildcards. Spell out the word forms instead.";return;}
+  const c=JSON.parse(JSON.stringify(cfg));
+  run={cfg:c,axes:{rows,cols},rowLabel:AXES[c.rowId]&&c.rowId!=="custom"?AXES[c.rowId].label.split(" · ")[0]:"Rows",colLabel:AXES[c.colId]&&c.colId!=="custom"?AXES[c.colId].label.split(" · ").pop():"Columns",
+    T:null,R:rows.map(()=>null),C:cols.map(()=>null),O:rows.map(()=>cols.map(()=>null)),when:new Date().toISOString().slice(0,10),live:true,demo:false};
+  sel=null; running=true; stopFlag=false;
+  $("runBtn").disabled=true; $("stopBtn").hidden=false;
+  const jobs=[{k:"T",q:cellQuery(c)}];
+  rows.forEach((r,i)=>jobs.push({k:"R",i,q:cellQuery(c,r)}));
+  cols.forEach((col,j)=>jobs.push({k:"C",j,q:cellQuery(c,null,col)}));
+  rows.forEach((r,i)=>cols.forEach((col,j)=>jobs.push({k:"O",i,j,q:cellQuery(c,r,col)})));
+  let done=0,fatal=null,idx=0;
+  renderAll();
+  const worker=async()=>{
+    while(idx<jobs.length&&!stopFlag&&!fatal){
+      const jb=jobs[idx++];
+      try{
+        const n=await countOf(jb.q);
+        if(jb.k==="T")run.T=n;else if(jb.k==="R")run.R[jb.i]=n;else if(jb.k==="C")run.C[jb.j]=n;else run.O[jb.i][jb.j]=n;
+      }catch(err){
+        if(jb.k==="O"&&err&&err.code==="tool_error"){run.O[jb.i][jb.j]={error:err.message||"error"};}
+        else{fatal=err;}
+      }
+      done++; $("bar").style.width=Math.round(done/jobs.length*100)+"%";
+      if(done%3===0||done===jobs.length){renderMatrix();}
+    }
+  };
+  await Promise.all([worker(),worker()]);
+  running=false; $("runBtn").disabled=false; $("stopBtn").hidden=true;
+  run.partial=stopFlag||!!fatal;
+  if(fatal){msg.hidden=false;msg.classList.add("err");msg.textContent=errCopy(fatal);}
+  else if(stopFlag){msg.hidden=false;msg.textContent="Stopped. Cells already counted are kept.";}
+  persist(); renderAll();
+  setTimeout(()=>{$("bar").style.width="0";},1200);
+}
+$("runBtn").addEventListener("click",runMap);
+$("stopBtn").addEventListener("click",()=>{stopFlag=true;});
+
+async function loadPapers(q){
+  const target=$("papers"); if(!target)return;
+  try{
+    let list=paperCache.get(q);
+    if(!list){list=await getPapers(q);paperCache.set(q,list);}
+    if($("qbox")&&$("qbox").textContent!==q)return; // selection changed
+    target.innerHTML=list.length?`<ul class="papers">${list.map(p=>`<li>${esc(p.title)}<div class="pm">${esc(p.first)}${p.first?" et al. · ":""}${esc(p.journal||"")} ${esc(p.year||"")} · ${p.doi?`<a href="https://doi.org/${esc(p.doi)}" target="_blank" rel="noopener">doi:${esc(p.doi)}</a>`:`<a href="https://pubmed.ncbi.nlm.nih.gov/${esc(p.pmid)}/" target="_blank" rel="noopener">PMID ${esc(p.pmid)}</a>`}</div></li>`).join("")}</ul><p class="hint" style="margin-top:6px">From PubMed, ranked by relevance.</p>`
+      :'<p class="muted" style="font-size:.86rem;margin-top:6px">No papers returned.</p>';
+    target.dataset.titles=JSON.stringify(list.map(p=>`${p.title} (${p.year||""})`));
+    target.dataset.dois=JSON.stringify(list.map(p=>(p.doi||"").toLowerCase()).filter(Boolean));
+  }catch(err){ if(target)target.innerHTML=`<p class="msg err" style="margin-top:6px">${esc(errCopy(err))}</p>`; }
+}
+
+/* ---------------- Claude features ---------------- */
+let rqCtl=null;
+async function draftRQ(r,c,o,e,z,q){
+  const out=$("rqOut"),btn=$("rqBtn"),stop=$("rqStop");
+  let titles=[];try{titles=JSON.parse(($("papers")&&$("papers").dataset.titles)||"[]");}catch(_){}
+  const prompt=`You help a public health researcher in Pakistan turn an evidence gap into a fundable study.
+Topic (PubMed query): ${run.cfg.topic}
+Gap cell: ${r.label} × ${c.label}
+PubMed hits in this cell: ${o}. Expected under an even spread: ${e.toFixed(1)}. Poisson z: ${z.toFixed(1)}.
+Topic total: ${run.T}. ${r.label} total: ${run.R[sel.i]}. ${c.label} total: ${run.C[sel.j]}.
+Most relevant existing papers in this cell (may be empty): ${titles.slice(0,5).join(" | ")||"none listed"}
+
+Write one specific, feasible research question that fills this gap, for a team with modest funding in South Asia.
+Do not cite or invent any paper. Do not claim the gap is confirmed; it is a search-count signal.
+Reply with ONLY a JSON object:
+{"question":string,"population":string,"exposure_or_intervention":string,"comparison":string,"outcome":string,"design":string,"sample_and_setting":string,"why_it_matters":string,"check_first":[string,string,string]}
+"check_first" = three concrete checks before committing (for example, databases beyond PubMed, grey literature, trial registries).`;
+  rqCtl=new AbortController(); btn.disabled=true; stop.hidden=false;
+  out.innerHTML='<p class="muted" style="font-size:.86rem">Thinking…</p>';
+  stop.onclick=()=>rqCtl&&rqCtl.abort();
+  try{
+    const d=await sampleFn.json(prompt,{signal:rqCtl.signal});
+    if(!d||typeof d!=="object"||!d.question)throw {code:"invalid_json"};
+    out.innerHTML=`<div class="rq"><p class="q">${esc(d.question)}</p>
+      <dl class="pico"><dt>Population</dt><dd>${esc(d.population)}</dd><dt>Exposure / intervention</dt><dd>${esc(d.exposure_or_intervention)}</dd><dt>Comparison</dt><dd>${esc(d.comparison)}</dd><dt>Outcome</dt><dd>${esc(d.outcome)}</dd><dt>Design</dt><dd>${esc(d.design)}</dd><dt>Sample &amp; setting</dt><dd>${esc(d.sample_and_setting)}</dd></dl>
+      <p><b>Why it matters.</b> ${esc(d.why_it_matters)}</p>
+      ${Array.isArray(d.check_first)?`<div><b>Check before you commit</b><ul style="margin:4px 0 0;padding-left:18px">${d.check_first.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>`:""}
+      <p class="hint">Drafted by Claude from the counts above. Verify before using.</p></div>`;
+  }catch(err){
+    const code=err&&err.code;
+    if(code==="cancelled"){out.innerHTML="";}
+    else if(["not_granted","sampling_disabled","not_declared","capability_disabled","capability_removed"].includes(code)){$("rqWrap").hidden=true;}
+    else if(code==="rate_limited"){out.innerHTML='<p class="msg err">Too many requests right now. Try again in a little while.</p>';}
+    else if(code==="invalid_json"||code==="empty_completion"){out.innerHTML='<p class="msg err">The draft came back in the wrong shape. Press the button to try again.</p>';}
+    else if(code==="refused"){out.innerHTML='<p class="msg err">Claude declined this one. Try a different cell.</p>';}
+    else{out.innerHTML='<p class="msg err">The draft was interrupted. Press the button to try again.</p>';}
+  }finally{btn.disabled=false;stop.hidden=true;}
+}
+async function suggestCols(){
+  const b=$("suggestBtn"); const old=b.textContent; b.disabled=true; b.textContent="Thinking…";
+  try{
+    const arr=await sampleFn.json(`Suggest 7 columns for an evidence-gap matrix on this PubMed topic: ${cfg.topic}
+Columns should be the key outcomes, sub-topics or intervention types a researcher would want to compare across countries.
+Each needs a short label (max 3 words) and a valid PubMed query fragment using [tiab], [mh] or [pt] tags, with no * wildcards and balanced quotes.
+Reply with ONLY a JSON array: [{"label":string,"query":string}]`,{modelTier:"quick"});
+    if(!Array.isArray(arr)||!arr.length)throw {code:"invalid_json"};
+    cfg.colsText=arr.filter(x=>x&&x.label&&x.query).slice(0,10).map(x=>`${String(x.label).replace(/=/g,"-")} = ${String(x.query).replace(/\*/g,"")}`).join("\n");
+    cfg.colId="custom"; $("colPreset").value="custom"; $("cols").value=cfg.colsText; updateHint();
+  }catch(err){
+    if(["not_granted","sampling_disabled","not_declared","capability_disabled","capability_removed"].includes(err&&err.code))b.hidden=true;
+    else{const m=$("runMsg");m.hidden=false;m.classList.add("err");m.textContent="Couldn't get suggestions just now. Try again, or pick a preset.";}
+  }finally{b.disabled=false;b.textContent=old;}
+}
+$("suggestBtn").addEventListener("click",suggestCols);
+
+/* ---------------- export ---------------- */
+function tableRows(){
+  const {rows,cols}=run.axes; const out=[["Row","Column","Found","Expected","Gap z","PubMed query"]];
+  rows.forEach((r,i)=>cols.forEach((c,j)=>{const o=run.O[i]?run.O[i][j]:null,e=expected(i,j),z=zOf(o,e);
+    out.push([r.label,c.label,typeof o==="number"?o:"",e!=null?e.toFixed(2):"",z!=null?z.toFixed(2):"",cellQuery(run.cfg,r,c)]);}));
+  return out;
+}
+$("copyTsv").addEventListener("click",()=>{
+  const {rows,cols}=run.axes;
+  const lines=[["",...cols.map(c=>c.label)].join("\t"),...rows.map((r,i)=>[r.label,...cols.map((c,j)=>{const o=run.O[i]?run.O[i][j]:null;return typeof o==="number"?o:"";})].join("\t"))];
+  copy(lines.join("\n"),$("copyToast"),$("mx"));
+});
+$("dlCsv").addEventListener("click",async()=>{
+  const csv=tableRows().map(r=>r.map(v=>{const s=String(v);return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;}).join(",")).join("\n");
+  const blob=new Blob([csv],{type:"text/csv"});
+  if(downloads){try{await downloads.save({filename:"evidence-gap-map.csv",data:blob});}catch(e){}return;}
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="evidence-gap-map.csv";document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},500);
+});
+
+/* ---------------- boot ---------------- */
+function renderAll(){renderMatrix();renderGaps();renderInspector();}
+function setStatus(kind,text){$("dot").className="dot "+kind;$("statusText").textContent=text;}
+// make sure the demo/saved run carries what the renderers need
+if(!run.cfg)run.cfg=JSON.parse(JSON.stringify(cfg));
+if(!run.axes)run.axes=axesOf(run.cfg);
+if(!run.rowLabel){run.rowLabel="Countries";run.colLabel="Study designs";}
+renderBuilder(); renderAll();
+setStatus("", "Checking PubMed connection…");
+
+async function goDirect(){
+  try{await ncbiCount("humans[mh] AND 2020[dp]");source="ncbi";setStatus("live","Live: PubMed via NCBI · OpenAlex");$("settings").hidden=false;$("dlCsv").hidden=false;}
+  catch(e){setStatus("off","Offline: showing a saved map");}
+  renderInspector();
+}
+(async()=>{
+  const w=window.claude;
+  if(!w||typeof w.use!=="function"){await goDirect();return;}
+  const [m,s,d]=await Promise.all([w.use("mcp").catch(()=>null),w.use("sample").catch(()=>null),w.use("downloads").catch(()=>null)]);
+  mcp=m; sampleFn=s; downloads=d;
+  if(downloads)$("dlCsv").hidden=false;
+  if(sampleFn)$("suggestBtn").hidden=false;
+  if(!mcp){await goDirect();return;}
+  try{
+    const lt=await mcp.listTools("PubMed");
+    const srv=lt&&lt.servers&&lt.servers[0];
+    if(!srv)setStatus("off","Add PubMed in Settings → Connectors to search live");
+    else if(srv.authStatus==="needs_reauth")setStatus("off","Reconnect PubMed in Settings → Connectors");
+    else {source="claude";setStatus("live","PubMed ready for live searches");}
+  }catch(e){setStatus("off",errCopy(e));}
+  renderInspector();
+})();
+})();
+</script>
+</body>
+</html>
